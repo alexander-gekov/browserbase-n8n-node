@@ -51,6 +51,12 @@ function normalizeUrl(url: string): string {
 	return `https://${url}`;
 }
 
+function resolveBaseUrl(value: unknown, fallback: string): string {
+	const trimmed = typeof value === 'string' ? value.trim() : '';
+	const base = trimmed || fallback;
+	return base.replace(/\/+$/, '');
+}
+
 function getSessionId(response: Record<string, unknown>): string | undefined {
 	const data = response.data as Record<string, unknown> | undefined;
 	return (data?.sessionId ?? response.sessionId ?? response.id) as string | undefined;
@@ -818,13 +824,14 @@ export class Browserbase implements INodeType {
 			): Promise<INodeCredentialTestResult> {
 				try {
 					const headers = getHeaders(credential.data!);
+					const baseUrl = resolveBaseUrl(credential.data?.baseUrl, API_BASE_URL);
 					const httpRequest = this.helpers['request' as keyof typeof this.helpers] as (
 						opts: object,
 					) => Promise<Record<string, unknown>>;
 
 					await httpRequest({
 						method: 'POST',
-						uri: `${API_BASE_URL}/v1/fetch`,
+						uri: `${baseUrl}/v1/fetch`,
 						headers,
 						body: { url: 'https://browserbase.com/' },
 						json: true,
@@ -874,6 +881,7 @@ export class Browserbase implements INodeType {
 		executeFunctions: IExecuteFunctions,
 		itemIndex: number,
 		headers: BrowserbaseHeaders,
+		baseUrl: string,
 	): Promise<INodeExecutionData> {
 		const query = executeFunctions.getNodeParameter('query', itemIndex) as string;
 		const numResults = executeFunctions.getNodeParameter('numResults', itemIndex) as number;
@@ -881,7 +889,7 @@ export class Browserbase implements INodeType {
 		const response = await this.apiCall(
 			executeFunctions,
 			'POST',
-			API_BASE_URL,
+			baseUrl,
 			'/v1/search',
 			headers,
 			{
@@ -907,6 +915,7 @@ export class Browserbase implements INodeType {
 		executeFunctions: IExecuteFunctions,
 		itemIndex: number,
 		headers: BrowserbaseHeaders,
+		baseUrl: string,
 	): Promise<INodeExecutionData> {
 		const url = normalizeUrl(executeFunctions.getNodeParameter('fetchUrl', itemIndex) as string);
 		const fetchOptions = executeFunctions.getNodeParameter('fetchOptions', itemIndex, {}) as {
@@ -918,7 +927,7 @@ export class Browserbase implements INodeType {
 		const response = await this.apiCall(
 			executeFunctions,
 			'POST',
-			API_BASE_URL,
+			baseUrl,
 			'/v1/fetch',
 			headers,
 			{
@@ -946,6 +955,7 @@ export class Browserbase implements INodeType {
 		executeFunctions: IExecuteFunctions,
 		itemIndex: number,
 		headers: BrowserbaseHeaders,
+		baseUrl: string,
 	): Promise<INodeExecutionData> {
 		let url = executeFunctions.getNodeParameter('url', itemIndex) as string;
 		url = normalizeUrl(url);
@@ -1048,7 +1058,7 @@ export class Browserbase implements INodeType {
 			const startResponse = await this.apiCall(
 				executeFunctions,
 				'POST',
-				STAGEHAND_BASE_URL,
+				baseUrl,
 				'/v1/sessions/start',
 				headers,
 				{
@@ -1068,7 +1078,7 @@ export class Browserbase implements INodeType {
 			await this.apiCall(
 				executeFunctions,
 				'POST',
-				STAGEHAND_BASE_URL,
+				baseUrl,
 				`/v1/sessions/${sessionId}/navigate`,
 				headers,
 				{
@@ -1123,7 +1133,7 @@ export class Browserbase implements INodeType {
 			const executeResponse = await this.apiCall(
 				executeFunctions,
 				'POST',
-				STAGEHAND_BASE_URL,
+				baseUrl,
 				`/v1/sessions/${sessionId}/agentExecute`,
 				headers,
 				{
@@ -1135,7 +1145,7 @@ export class Browserbase implements INodeType {
 			await this.apiCall(
 				executeFunctions,
 				'POST',
-				STAGEHAND_BASE_URL,
+				baseUrl,
 				`/v1/sessions/${sessionId}/end`,
 				headers,
 				{},
@@ -1163,7 +1173,7 @@ export class Browserbase implements INodeType {
 					await this.apiCall(
 						executeFunctions,
 						'POST',
-						STAGEHAND_BASE_URL,
+						baseUrl,
 						`/v1/sessions/${sessionId}/end`,
 						headers,
 						{},
@@ -1199,12 +1209,15 @@ export class Browserbase implements INodeType {
 					includeModelApiKey: resource === 'agent' && modelSource === 'userProvidedKey',
 				});
 
+				const apiBaseUrl = resolveBaseUrl(credentials.baseUrl, API_BASE_URL);
+				const stagehandBaseUrl = resolveBaseUrl(credentials.stagehandBaseUrl, STAGEHAND_BASE_URL);
+
 				if (resource === 'search') {
-					returnData.push(await node.executeSearch(this, i, headers));
+					returnData.push(await node.executeSearch(this, i, headers, apiBaseUrl));
 				} else if (resource === 'fetch') {
-					returnData.push(await node.executeFetch(this, i, headers));
+					returnData.push(await node.executeFetch(this, i, headers, apiBaseUrl));
 				} else {
-					returnData.push(await node.executeAgent(this, i, headers));
+					returnData.push(await node.executeAgent(this, i, headers, stagehandBaseUrl));
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
