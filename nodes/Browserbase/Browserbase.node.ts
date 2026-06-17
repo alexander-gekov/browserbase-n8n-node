@@ -1209,10 +1209,10 @@ export class Browserbase implements INodeType {
 
 				const useCredentialBaseUrls = this.getNode().typeVersion >= 2.1;
 				const apiBaseUrl = useCredentialBaseUrls
-					? normalizeBaseUrl(credentials.baseUrl as string)
+					? normalizeBaseUrl((credentials.baseUrl as string) || API_BASE_URL)
 					: API_BASE_URL;
 				const stagehandBaseUrl = useCredentialBaseUrls
-					? normalizeBaseUrl(credentials.stagehandBaseUrl as string)
+					? normalizeBaseUrl((credentials.stagehandBaseUrl as string) || STAGEHAND_BASE_URL)
 					: STAGEHAND_BASE_URL;
 
 				if (resource === 'search') {
