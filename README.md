@@ -102,8 +102,6 @@ The node uses one Browserbase credential:
 | Credential | Description |
 | --- | --- |
 | `Browserbase API Key` | Required for all resources |
-| `Base URL` | Optional. Base URL for the Browserbase REST API (Search and Fetch). Defaults to `https://api.browserbase.com`. Override to point at a proxy or regional endpoint. |
-| `Stagehand Base URL` | Optional. Base URL for the Stagehand API used by the Agent resource. Defaults to `https://api.stagehand.browserbase.com`. |
 | `Browserbase Project ID (Deprecated)` | Optional legacy header |
 | `Model API Key` | Optional. Only needed for Agent when using your own model provider key |
 

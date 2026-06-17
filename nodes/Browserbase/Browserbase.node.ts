@@ -51,10 +51,8 @@ function normalizeUrl(url: string): string {
 	return `https://${url}`;
 }
 
-function resolveBaseUrl(value: unknown, fallback: string): string {
-	const trimmed = typeof value === 'string' ? value.trim() : '';
-	const base = trimmed || fallback;
-	return base.replace(/\/+$/, '');
+function normalizeBaseUrl(url: string): string {
+	return url.trim().replace(/\/+$/, '');
 }
 
 function getSessionId(response: Record<string, unknown>): string | undefined {
@@ -796,7 +794,7 @@ export class Browserbase implements INodeType {
 		name: 'browserbase',
 		icon: 'file:../../icons/browserbase.svg',
 		group: ['transform'],
-		version: 2,
+		version: [2, 2.1],
 		subtitle:
 			'={{$parameter["resource"] === "agent" ? $parameter["operation"] + ": " + $parameter["mode"] : $parameter["operation"]}}',
 		description: 'Browser automation, web search, and page fetches with Browserbase.',
@@ -824,7 +822,7 @@ export class Browserbase implements INodeType {
 			): Promise<INodeCredentialTestResult> {
 				try {
 					const headers = getHeaders(credential.data!);
-					const baseUrl = resolveBaseUrl(credential.data?.baseUrl, API_BASE_URL);
+					const baseUrl = normalizeBaseUrl((credential.data?.baseUrl as string) ?? API_BASE_URL);
 					const httpRequest = this.helpers['request' as keyof typeof this.helpers] as (
 						opts: object,
 					) => Promise<Record<string, unknown>>;
@@ -1209,8 +1207,13 @@ export class Browserbase implements INodeType {
 					includeModelApiKey: resource === 'agent' && modelSource === 'userProvidedKey',
 				});
 
-				const apiBaseUrl = resolveBaseUrl(credentials.baseUrl, API_BASE_URL);
-				const stagehandBaseUrl = resolveBaseUrl(credentials.stagehandBaseUrl, STAGEHAND_BASE_URL);
+				const useCredentialBaseUrls = this.getNode().typeVersion >= 2.1;
+				const apiBaseUrl = useCredentialBaseUrls
+					? normalizeBaseUrl(credentials.baseUrl as string)
+					: API_BASE_URL;
+				const stagehandBaseUrl = useCredentialBaseUrls
+					? normalizeBaseUrl(credentials.stagehandBaseUrl as string)
+					: STAGEHAND_BASE_URL;
 
 				if (resource === 'search') {
 					returnData.push(await node.executeSearch(this, i, headers, apiBaseUrl));

@@ -26,19 +26,14 @@ export class BrowserbaseApi implements ICredentialType {
 		{
 			displayName: 'Base URL',
 			name: 'baseUrl',
-			type: 'string',
+			type: 'hidden',
 			default: 'https://api.browserbase.com',
-			required: false,
-			description:
-				'Base URL for the Browserbase REST API (Search and Fetch). Overridden automatically by n8n Connect.',
 		},
 		{
 			displayName: 'Stagehand Base URL',
 			name: 'stagehandBaseUrl',
-			type: 'string',
+			type: 'hidden',
 			default: 'https://api.stagehand.browserbase.com',
-			required: false,
-			description: 'Base URL for the Stagehand API used by the Agent resource',
 		},
 		{
 			displayName: 'Browserbase Project ID (Deprecated)',
