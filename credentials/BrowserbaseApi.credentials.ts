@@ -24,6 +24,18 @@ export class BrowserbaseApi implements ICredentialType {
 			description: 'Your Browserbase API key',
 		},
 		{
+			displayName: 'Base URL',
+			name: 'baseUrl',
+			type: 'hidden',
+			default: 'https://api.browserbase.com',
+		},
+		{
+			displayName: 'Stagehand Base URL',
+			name: 'stagehandBaseUrl',
+			type: 'hidden',
+			default: 'https://api.stagehand.browserbase.com',
+		},
+		{
 			displayName: 'Browserbase Project ID (Deprecated)',
 			name: 'browserbaseProjectId',
 			type: 'string',
