@@ -63,7 +63,7 @@ function getSessionId(response: Record<string, unknown>): string | undefined {
 function getHeaders(
 	credentials: ICredentialDataDecryptedObject,
 	options?: {
-		includeModelApiKey?: boolean;
+		modelApiKey?: string;
 	},
 ): BrowserbaseHeaders {
 	const headers: BrowserbaseHeaders = {
@@ -72,8 +72,8 @@ function getHeaders(
 		'x-bb-api-key': credentials.browserbaseApiKey as string,
 	};
 
-	if (options?.includeModelApiKey) {
-		headers['x-model-api-key'] = credentials.modelApiKey as string;
+	if (options?.modelApiKey) {
+		headers['x-model-api-key'] = options.modelApiKey;
 	}
 
 	const projectId = (credentials.browserbaseProjectId as string)?.trim();
@@ -82,6 +82,19 @@ function getHeaders(
 	}
 
 	return headers;
+}
+
+function resolveModelApiKey(
+	credentials: ICredentialDataDecryptedObject,
+	provider: string,
+): string {
+	const perProvider: Record<string, unknown> = {
+		anthropic: credentials.anthropicApiKey,
+		openai: credentials.openAiApiKey,
+		google: credentials.googleApiKey,
+	};
+	// Fall back to the legacy single `modelApiKey` field for credentials saved before per-provider keys existed.
+	return ((perProvider[provider] as string) || (credentials.modelApiKey as string) || '').trim();
 }
 
 function buildProperties(): INodeProperties[] {
@@ -1157,16 +1170,19 @@ export class Browserbase implements INodeType {
 				const modelSource = this.getNodeParameter('modelSource', i, 'gateway') as string;
 				const credentials = await this.getCredentials('browserbaseApi');
 
-				if (resource === 'agent' && modelSource === 'userProvidedKey' && !credentials.modelApiKey) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'Model Source is set to "User-provided API key" but no Model API Key is configured in the Browserbase credentials.',
-					);
+				let modelApiKey: string | undefined;
+				if (resource === 'agent' && modelSource === 'userProvidedKey') {
+					const provider = (this.getNodeParameter('driverModel', i) as string).split('/')[0];
+					modelApiKey = resolveModelApiKey(credentials, provider);
+					if (!modelApiKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Model Source is set to "User-provided API key" but no API key for "${provider}" is configured in the Browserbase credentials.`,
+						);
+					}
 				}
 
-				const headers = getHeaders(credentials, {
-					includeModelApiKey: resource === 'agent' && modelSource === 'userProvidedKey',
-				});
+				const headers = getHeaders(credentials, { modelApiKey });
 
 				const useCredentialBaseUrls = this.getNode().typeVersion >= 2.1;
 				const apiBaseUrl = useCredentialBaseUrls

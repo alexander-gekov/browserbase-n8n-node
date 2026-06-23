@@ -44,13 +44,44 @@ export class BrowserbaseApi implements ICredentialType {
 			description: 'Optional. Your Browserbase project ID (no longer required for new setups)',
 		},
 		{
-			displayName: 'Model API Key',
+			displayName: 'Anthropic API Key',
+			name: 'anthropicApiKey',
+			type: 'string',
+			typeOptions: { password: true },
+			default: '',
+			required: false,
+			description:
+				'Optional. Bring your own Anthropic key for the Agent. Leave all model keys empty to use the Browserbase Model Gateway.',
+		},
+		{
+			displayName: 'OpenAI API Key',
+			name: 'openAiApiKey',
+			type: 'string',
+			typeOptions: { password: true },
+			default: '',
+			required: false,
+			description:
+				'Optional. Bring your own OpenAI key for the Agent. Leave all model keys empty to use the Browserbase Model Gateway.',
+		},
+		{
+			displayName: 'Google API Key',
+			name: 'googleApiKey',
+			type: 'string',
+			typeOptions: { password: true },
+			default: '',
+			required: false,
+			description:
+				'Optional. Bring your own Google (Gemini) key for the Agent. Leave all model keys empty to use the Browserbase Model Gateway.',
+		},
+		{
+			displayName: 'Model API Key (Deprecated)',
 			name: 'modelApiKey',
 			type: 'string',
 			typeOptions: { password: true },
 			default: '',
 			required: false,
-			description: 'Optional. Provide your own model API key, or leave blank to use the <a href="https://docs.browserbase.com/platform/model-gateway/overview">Browserbase Model Gateway</a>.',
+			description:
+				'Deprecated. Use the provider-specific keys above instead. Kept for credentials created before per-provider keys existed; used as a fallback when no matching provider key is set.',
 		},
 	];
 
