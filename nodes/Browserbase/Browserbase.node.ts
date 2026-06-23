@@ -168,20 +168,6 @@ function buildProperties(): INodeProperties[] {
 			default: 'search',
 		},
 		{
-			displayName: 'Mode Info',
-			name: 'modeNotice',
-			type: 'notice',
-			default: '',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-				},
-			},
-			description:
-				'CUA uses vision/coordinates (best for complex UIs). DOM uses selectors (faster, any LLM). Hybrid combines both.',
-		},
-		{
 			displayName: 'Starting URL',
 			name: 'url',
 			type: 'string',
@@ -240,37 +226,7 @@ function buildProperties(): INodeProperties[] {
 			],
 			default: 'gateway',
 			description:
-				'Choose how model calls are routed. Model Gateway lets you mix providers; User-provided API key requires both models from the same provider.',
-		},
-		{
-			displayName: 'Model Info',
-			name: 'modelNoticeGateway',
-			type: 'notice',
-			default: '',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-					modelSource: ['gateway'],
-				},
-			},
-			description:
-				'Using the Browserbase Model Gateway. You can freely mix models from different providers for Driver and Agent.',
-		},
-		{
-			displayName: 'Model Info',
-			name: 'modelNoticeBYOK',
-			type: 'notice',
-			default: '',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-					modelSource: ['userProvidedKey'],
-				},
-			},
-			description:
-				'Using your own API key from credentials. Both Driver and Agent models MUST be from the same provider.',
+				'How model calls are routed. Model Gateway lets you freely mix providers for Driver and Agent. User-provided API key uses your own key from credentials and requires both models from the same provider.',
 		},
 		{
 			displayName: 'Driver Model',
@@ -313,7 +269,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'Model for browser session (DOM-based, used for navigation)',
+			description:
+				'Model for browser session (DOM-based, used for navigation). See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Mode',
@@ -343,7 +300,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'cua',
-			description: 'Agent mode determines how the agent interacts with pages',
+			description:
+				'How the agent interacts with pages. CUA uses vision/coordinates (best for complex UIs). DOM uses selectors (faster, works with any LLM). Hybrid combines both. <a href="https://docs.stagehand.dev/v3/basics/agent" target="_blank">How to pick a mode</a>.',
 		},
 		{
 			displayName: 'Agent Model',
@@ -391,7 +349,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'CUA model for vision-based browser control',
+			description:
+				'CUA model for vision-based browser control. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Agent Model',
@@ -431,7 +390,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'LLM for DOM-based browser control',
+			description:
+				'LLM for DOM-based browser control. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Agent Model',
@@ -459,7 +419,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'Model for hybrid mode (must support coordinate actions)',
+			description:
+				'Model for hybrid mode (must support coordinate actions). See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Options',
