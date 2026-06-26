@@ -7,6 +7,7 @@ import {
 	type INodeCredentialTestResult,
 	type INodeExecutionData,
 	type INodeProperties,
+	type INodePropertyOptions,
 	type INodeType,
 	type INodeTypeDescription,
 	type IHttpRequestMethods,
@@ -15,6 +16,59 @@ import {
 
 const STAGEHAND_BASE_URL = 'https://api.stagehand.browserbase.com';
 const API_BASE_URL = 'https://api.browserbase.com';
+
+// Single source of truth for CUA "Agent Model" options — mirrors Stagehand's
+// AVAILABLE_CUA_MODELS
+const CUA_MODEL_OPTIONS: INodePropertyOptions[] = [
+	{ name: 'Claude Fable 5 (Anthropic)', value: 'anthropic/claude-fable-5' },
+	{
+		name: 'Claude Haiku 4.5 (2025-10-01, Anthropic)',
+		value: 'anthropic/claude-haiku-4-5-20251001',
+	},
+	{ name: 'Claude Haiku 4.5 (Anthropic)', value: 'anthropic/claude-haiku-4-5' },
+	{
+		name: 'Claude Opus 4.5 (2025-11-01, Anthropic)',
+		value: 'anthropic/claude-opus-4-5-20251101',
+	},
+	{ name: 'Claude Opus 4.6 (Anthropic)', value: 'anthropic/claude-opus-4-6' },
+	{ name: 'Claude Opus 4.8 (Anthropic)', value: 'anthropic/claude-opus-4-8' },
+	{
+		name: 'Claude Sonnet 4 (2025-05-14, Anthropic)',
+		value: 'anthropic/claude-sonnet-4-20250514',
+	},
+	{
+		name: 'Claude Sonnet 4.5 (2025-09-29, Anthropic)',
+		value: 'anthropic/claude-sonnet-4-5-20250929',
+	},
+	{ name: 'Claude Sonnet 4.6 (Anthropic)', value: 'anthropic/claude-sonnet-4-6' },
+	{
+		name: 'Computer Use Preview (2025-03-11, OpenAI)',
+		value: 'openai/computer-use-preview-2025-03-11',
+	},
+	{ name: 'Computer Use Preview (OpenAI)', value: 'openai/computer-use-preview' },
+	{ name: 'Fara 7B (Microsoft)', value: 'microsoft/fara-7b' },
+	{ name: 'Gemini 2.5 CUA (Google)', value: 'google/gemini-2.5-computer-use-preview-10-2025' },
+	{ name: 'Gemini 3 Flash (Google)', value: 'google/gemini-3-flash-preview' },
+	{ name: 'Gemini 3 Pro (Google)', value: 'google/gemini-3-pro-preview' },
+	{ name: 'Gemini 3.5 Flash (Google)', value: 'google/gemini-3.5-flash' },
+	{ name: 'GPT-5.4 (OpenAI)', value: 'openai/gpt-5.4' },
+	{ name: 'GPT-5.4 Mini (OpenAI)', value: 'openai/gpt-5.4-mini' },
+	{ name: 'GPT-5.5 (OpenAI)', value: 'openai/gpt-5.5' },
+];
+
+const CUA_MODELS = new Set(CUA_MODEL_OPTIONS.map((option) => option.value));
+
+// Curated "Agent Model" options for Hybrid mode (must support coordinate actions).
+// Shared by the v3 and legacy modelHybrid dropdowns.
+const HYBRID_MODEL_OPTIONS: INodePropertyOptions[] = [
+	{ name: 'Claude Haiku 4.5 (Anthropic)', value: 'anthropic/claude-haiku-4-5' },
+	{ name: 'Claude Opus 4.8 (Anthropic)', value: 'anthropic/claude-opus-4-8' },
+	{ name: 'Claude Sonnet 4.6 (Anthropic)', value: 'anthropic/claude-sonnet-4-6' },
+	{ name: 'Gemini 3 Flash (Google)', value: 'google/gemini-3-flash-preview' },
+	{ name: 'Gemini 3 Pro (Google)', value: 'google/gemini-3-pro-preview' },
+	{ name: 'GPT-5.4 Mini (OpenAI)', value: 'openai/gpt-5.4-mini' },
+	{ name: 'GPT-5.5 (OpenAI)', value: 'openai/gpt-5.5' },
+];
 
 type BrowserbaseHeaders = Record<string, string>;
 
@@ -317,40 +371,7 @@ function buildProperties(): INodeProperties[] {
 							mode: ['cua'],
 						},
 					},
-					options: [
-						{
-							name: 'Claude Haiku 4.5 (Anthropic)',
-							value: 'anthropic/claude-haiku-4-5',
-						},
-						{
-							name: 'Claude Opus 4.6 (Anthropic)',
-							value: 'anthropic/claude-opus-4-6',
-						},
-						{
-							name: 'Claude Sonnet 4.6 (Anthropic)',
-							value: 'anthropic/claude-sonnet-4-6',
-						},
-						{
-							name: 'Computer Use Preview (2025-03-11, OpenAI)',
-							value: 'openai/computer-use-preview-2025-03-11',
-						},
-						{
-							name: 'Computer Use Preview (OpenAI)',
-							value: 'openai/computer-use-preview',
-						},
-						{
-							name: 'Gemini 2.5 CUA (Google)',
-							value: 'google/gemini-2.5-computer-use-preview-10-2025',
-						},
-						{
-							name: 'Gemini 3 Flash (Google)',
-							value: 'google/gemini-3-flash-preview',
-						},
-						{
-							name: 'Gemini 3 Pro (Google)',
-							value: 'google/gemini-3-pro-preview',
-						},
-					],
+					options: CUA_MODEL_OPTIONS,
 					default: 'google/gemini-3-flash-preview',
 					description:
 						'Optional. Overrides the reasoning model for CUA mode. Defaults to the Model above. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare models.',
@@ -403,20 +424,7 @@ function buildProperties(): INodeProperties[] {
 							mode: ['hybrid'],
 						},
 					},
-					options: [
-						{
-							name: 'Gemini 3 Flash (Google)',
-							value: 'google/gemini-3-flash-preview',
-						},
-						{
-							name: 'Claude Sonnet 4.6 (Anthropic)',
-							value: 'anthropic/claude-sonnet-4-6',
-						},
-						{
-							name: 'Claude Haiku 4.5 (Anthropic)',
-							value: 'anthropic/claude-haiku-4-5-20251001',
-						},
-					],
+					options: HYBRID_MODEL_OPTIONS,
 					default: 'google/gemini-3-flash-preview',
 					description:
 						'Optional. Overrides the reasoning model for Hybrid mode (must support coordinate actions). Defaults to the Model above. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare models.',
@@ -608,40 +616,7 @@ function buildProperties(): INodeProperties[] {
 					mode: ['cua'],
 				},
 			},
-			options: [
-				{
-					name: 'Claude Haiku 4.5 (Anthropic)',
-					value: 'anthropic/claude-haiku-4-5',
-				},
-				{
-					name: 'Claude Opus 4.6 (Anthropic)',
-					value: 'anthropic/claude-opus-4-6',
-				},
-				{
-					name: 'Claude Sonnet 4.6 (Anthropic)',
-					value: 'anthropic/claude-sonnet-4-6',
-				},
-				{
-					name: 'Computer Use Preview (2025-03-11, OpenAI)',
-					value: 'openai/computer-use-preview-2025-03-11',
-				},
-				{
-					name: 'Computer Use Preview (OpenAI)',
-					value: 'openai/computer-use-preview',
-				},
-				{
-					name: 'Gemini 2.5 CUA (Google)',
-					value: 'google/gemini-2.5-computer-use-preview-10-2025',
-				},
-				{
-					name: 'Gemini 3 Flash (Google)',
-					value: 'google/gemini-3-flash-preview',
-				},
-				{
-					name: 'Gemini 3 Pro (Google)',
-					value: 'google/gemini-3-pro-preview',
-				},
-			],
+			options: CUA_MODEL_OPTIONS,
 			default: 'anthropic/claude-sonnet-4-6',
 			description:
 				'CUA model for vision-based browser control. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
@@ -698,20 +673,7 @@ function buildProperties(): INodeProperties[] {
 					mode: ['hybrid'],
 				},
 			},
-			options: [
-				{
-					name: 'Gemini 3 Flash (Google)',
-					value: 'google/gemini-3-flash-preview',
-				},
-				{
-					name: 'Claude Sonnet 4.6 (Anthropic)',
-					value: 'anthropic/claude-sonnet-4-6',
-				},
-				{
-					name: 'Claude Haiku 4.5 (Anthropic)',
-					value: 'anthropic/claude-haiku-4-5-20251001',
-				},
-			],
+			options: HYBRID_MODEL_OPTIONS,
 			default: 'anthropic/claude-sonnet-4-6',
 			description:
 				'Model for hybrid mode (must support coordinate actions). See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
@@ -1259,6 +1221,16 @@ export class Browserbase implements INodeType {
 			maxSteps = options.maxSteps ?? 20;
 			systemPrompt = options.systemPrompt;
 			highlightCursor = options.highlightCursor ?? true;
+		}
+
+		// CUA mode only works with computer-use-capable models. When the Agent
+		// Model override is unset it falls back to the driver Model, which may not
+		// be a CUA model — sending it would make Stagehand silently skip CUA mode.
+		if (mode === 'cua' && !CUA_MODELS.has(agentModel)) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`CUA mode requires a computer-use-capable Agent Model, but "${agentModel}" is not one. Set "Agent Model" in Model Options to a CUA model (e.g. google/gemini-3-flash-preview), or switch Mode to DOM.`,
+			);
 		}
 
 		if (modelSource === 'userProvidedKey') {
