@@ -245,11 +245,11 @@ function buildProperties(): INodeProperties[] {
 				},
 				{
 					name: 'Gemini 3 Flash (Google)',
-					value: 'google/gemini-3-flash',
+					value: 'google/gemini-3-flash-preview',
 				},
 				{
 					name: 'Gemini 3 Pro (Google)',
-					value: 'google/gemini-3-pro',
+					value: 'google/gemini-3-pro-preview',
 				},
 				{
 					name: 'GPT-4o (OpenAI)',
@@ -260,7 +260,7 @@ function buildProperties(): INodeProperties[] {
 					value: 'openai/gpt-4o-mini',
 				},
 			],
-			default: 'google/gemini-3-flash',
+			default: 'google/gemini-3-flash-preview',
 			description:
 				'The model that drives the browser and runs the agent. Handles both navigation and reasoning by default. To use a different reasoning model, set "Agent Model" in Model Options. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare models.',
 		},
@@ -547,11 +547,11 @@ function buildProperties(): INodeProperties[] {
 				},
 				{
 					name: 'Gemini 3 Flash (Google)',
-					value: 'google/gemini-3-flash',
+					value: 'google/gemini-3-flash-preview',
 				},
 				{
 					name: 'Gemini 3 Pro (Google)',
-					value: 'google/gemini-3-pro',
+					value: 'google/gemini-3-pro-preview',
 				},
 				{
 					name: 'GPT-4o (OpenAI)',
