@@ -70,6 +70,13 @@ const HYBRID_MODEL_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'GPT-5.5 (OpenAI)', value: 'openai/gpt-5.5' },
 ];
 
+// Hybrid mode needs a model that supports coordinate actions. Mirrors
+// Stagehand's HYBRID_CAPABLE_MODEL_PATTERNS (substring match, not a fixed list).
+const HYBRID_CAPABLE_MODEL_PATTERNS = ['gemini-3', 'claude', 'gpt-5.4', 'gpt-5.5'];
+
+const isHybridCapable = (model: string): boolean =>
+	HYBRID_CAPABLE_MODEL_PATTERNS.some((pattern) => model.includes(pattern));
+
 type BrowserbaseHeaders = Record<string, string>;
 
 type BrowserOptions = {
@@ -1230,6 +1237,15 @@ export class Browserbase implements INodeType {
 			throw new NodeOperationError(
 				executeFunctions.getNode(),
 				`CUA mode requires a computer-use-capable Agent Model, but "${agentModel}" is not one. Set "Agent Model" in Model Options to a CUA model (e.g. google/gemini-3-flash-preview), or switch Mode to DOM.`,
+			);
+		}
+
+		// Same fallback risk as CUA: an unset hybrid Agent Model resolves to the
+		// driver Model, which may not support coordinate actions.
+		if (mode === 'hybrid' && !isHybridCapable(agentModel)) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`Hybrid mode requires a model that supports coordinate actions, but "${agentModel}" is not one. Set "Agent Model" in Model Options to a hybrid-capable model (e.g. google/gemini-3-flash-preview), or switch Mode to DOM.`,
 			);
 		}
 
