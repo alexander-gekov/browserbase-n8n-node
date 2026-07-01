@@ -103,7 +103,7 @@ The node uses one Browserbase credential:
 | --- | --- |
 | `Browserbase API Key` | Required for all resources |
 | `Browserbase Project ID (Deprecated)` | Optional legacy header |
-| `Model API Key` | Optional. Only needed for Agent when using your own model provider key |
+| `Anthropic / OpenAI / Google API Key` | Optional. Bring your own model API key per provider for the Agent. Leave all empty to use the Browserbase Model Gateway. |
 
 ## Example Usage
 

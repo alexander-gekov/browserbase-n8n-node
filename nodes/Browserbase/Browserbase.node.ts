@@ -7,6 +7,7 @@ import {
 	type INodeCredentialTestResult,
 	type INodeExecutionData,
 	type INodeProperties,
+	type INodePropertyOptions,
 	type INodeType,
 	type INodeTypeDescription,
 	type IHttpRequestMethods,
@@ -15,6 +16,66 @@ import {
 
 const STAGEHAND_BASE_URL = 'https://api.stagehand.browserbase.com';
 const API_BASE_URL = 'https://api.browserbase.com';
+
+// Single source of truth for CUA "Agent Model" options — mirrors Stagehand's
+// AVAILABLE_CUA_MODELS
+const CUA_MODEL_OPTIONS: INodePropertyOptions[] = [
+	{ name: 'Claude Fable 5 (Anthropic)', value: 'anthropic/claude-fable-5' },
+	{
+		name: 'Claude Haiku 4.5 (2025-10-01, Anthropic)',
+		value: 'anthropic/claude-haiku-4-5-20251001',
+	},
+	{ name: 'Claude Haiku 4.5 (Anthropic)', value: 'anthropic/claude-haiku-4-5' },
+	{
+		name: 'Claude Opus 4.5 (2025-11-01, Anthropic)',
+		value: 'anthropic/claude-opus-4-5-20251101',
+	},
+	{ name: 'Claude Opus 4.6 (Anthropic)', value: 'anthropic/claude-opus-4-6' },
+	{ name: 'Claude Opus 4.8 (Anthropic)', value: 'anthropic/claude-opus-4-8' },
+	{
+		name: 'Claude Sonnet 4 (2025-05-14, Anthropic)',
+		value: 'anthropic/claude-sonnet-4-20250514',
+	},
+	{
+		name: 'Claude Sonnet 4.5 (2025-09-29, Anthropic)',
+		value: 'anthropic/claude-sonnet-4-5-20250929',
+	},
+	{ name: 'Claude Sonnet 4.6 (Anthropic)', value: 'anthropic/claude-sonnet-4-6' },
+	{
+		name: 'Computer Use Preview (2025-03-11, OpenAI)',
+		value: 'openai/computer-use-preview-2025-03-11',
+	},
+	{ name: 'Computer Use Preview (OpenAI)', value: 'openai/computer-use-preview' },
+	{ name: 'Fara 7B (Microsoft)', value: 'microsoft/fara-7b' },
+	{ name: 'Gemini 2.5 CUA (Google)', value: 'google/gemini-2.5-computer-use-preview-10-2025' },
+	{ name: 'Gemini 3 Flash (Google)', value: 'google/gemini-3-flash-preview' },
+	{ name: 'Gemini 3 Pro (Google)', value: 'google/gemini-3-pro-preview' },
+	{ name: 'Gemini 3.5 Flash (Google)', value: 'google/gemini-3.5-flash' },
+	{ name: 'GPT-5.4 (OpenAI)', value: 'openai/gpt-5.4' },
+	{ name: 'GPT-5.4 Mini (OpenAI)', value: 'openai/gpt-5.4-mini' },
+	{ name: 'GPT-5.5 (OpenAI)', value: 'openai/gpt-5.5' },
+];
+
+const CUA_MODELS = new Set(CUA_MODEL_OPTIONS.map((option) => option.value));
+
+// Curated "Agent Model" options for Hybrid mode (must support coordinate actions).
+// Shared by the v3 and legacy modelHybrid dropdowns.
+const HYBRID_MODEL_OPTIONS: INodePropertyOptions[] = [
+	{ name: 'Claude Haiku 4.5 (Anthropic)', value: 'anthropic/claude-haiku-4-5' },
+	{ name: 'Claude Opus 4.8 (Anthropic)', value: 'anthropic/claude-opus-4-8' },
+	{ name: 'Claude Sonnet 4.6 (Anthropic)', value: 'anthropic/claude-sonnet-4-6' },
+	{ name: 'Gemini 3 Flash (Google)', value: 'google/gemini-3-flash-preview' },
+	{ name: 'Gemini 3 Pro (Google)', value: 'google/gemini-3-pro-preview' },
+	{ name: 'GPT-5.4 Mini (OpenAI)', value: 'openai/gpt-5.4-mini' },
+	{ name: 'GPT-5.5 (OpenAI)', value: 'openai/gpt-5.5' },
+];
+
+// Hybrid mode needs a model that supports coordinate actions. Mirrors
+// Stagehand's HYBRID_CAPABLE_MODEL_PATTERNS (substring match, not a fixed list).
+const HYBRID_CAPABLE_MODEL_PATTERNS = ['gemini-3', 'claude', 'gpt-5.4', 'gpt-5.5'];
+
+const isHybridCapable = (model: string): boolean =>
+	HYBRID_CAPABLE_MODEL_PATTERNS.some((pattern) => model.includes(pattern));
 
 type BrowserbaseHeaders = Record<string, string>;
 
@@ -63,7 +124,7 @@ function getSessionId(response: Record<string, unknown>): string | undefined {
 function getHeaders(
 	credentials: ICredentialDataDecryptedObject,
 	options?: {
-		includeModelApiKey?: boolean;
+		modelApiKey?: string;
 	},
 ): BrowserbaseHeaders {
 	const headers: BrowserbaseHeaders = {
@@ -72,8 +133,8 @@ function getHeaders(
 		'x-bb-api-key': credentials.browserbaseApiKey as string,
 	};
 
-	if (options?.includeModelApiKey) {
-		headers['x-model-api-key'] = credentials.modelApiKey as string;
+	if (options?.modelApiKey) {
+		headers['x-model-api-key'] = options.modelApiKey;
 	}
 
 	const projectId = (credentials.browserbaseProjectId as string)?.trim();
@@ -84,13 +145,63 @@ function getHeaders(
 	return headers;
 }
 
+function resolveModelApiKey(
+	credentials: ICredentialDataDecryptedObject,
+	provider: string,
+): string {
+	const perProvider: Record<string, unknown> = {
+		anthropic: credentials.anthropicApiKey,
+		openai: credentials.openAiApiKey,
+		google: credentials.googleApiKey,
+	};
+	// Fall back to the legacy single `modelApiKey` field for credentials saved before per-provider keys existed.
+	return ((perProvider[provider] as string) || (credentials.modelApiKey as string) || '').trim();
+}
+
 function buildProperties(): INodeProperties[] {
 	return [
+		{
+			displayName: 'Action',
+			name: 'operation',
+			type: 'options',
+			noDataExpression: true,
+			displayOptions: {
+				show: {
+					'@version': [{ _cnd: { gte: 3 } }],
+				},
+			},
+			options: [
+				{
+					name: 'Run an Agent',
+					value: 'execute',
+					description: 'Run an AI agent to perform browser automation tasks',
+					action: 'Run an agent',
+				},
+				{
+					name: 'Fetch a Webpage',
+					value: 'fetch',
+					description: 'Fetch a page without starting a browser session',
+					action: 'Fetch a webpage',
+				},
+				{
+					name: 'Search the Web',
+					value: 'search',
+					description: 'Search the web and return structured results',
+					action: 'Search the web',
+				},
+			],
+			default: 'execute',
+		},
 		{
 			displayName: 'Resource',
 			name: 'resource',
 			type: 'options',
 			noDataExpression: true,
+			displayOptions: {
+				show: {
+					'@version': [{ _cnd: { lt: 3 } }],
+				},
+			},
 			options: [
 				{
 					name: 'Agent',
@@ -114,15 +225,16 @@ function buildProperties(): INodeProperties[] {
 			noDataExpression: true,
 			displayOptions: {
 				show: {
+					'@version': [{ _cnd: { lt: 3 } }],
 					resource: ['agent'],
 				},
 			},
 			options: [
 				{
-					name: 'Execute',
+					name: 'Run an Agent',
 					value: 'execute',
-					description: 'Execute an AI agent to perform browser automation tasks',
-					action: 'Execute an agent',
+					description: 'Run an AI agent to perform browser automation tasks',
+					action: 'Run an agent',
 				},
 			],
 			default: 'execute',
@@ -134,6 +246,7 @@ function buildProperties(): INodeProperties[] {
 			noDataExpression: true,
 			displayOptions: {
 				show: {
+					'@version': [{ _cnd: { lt: 3 } }],
 					resource: ['fetch'],
 				},
 			},
@@ -154,6 +267,7 @@ function buildProperties(): INodeProperties[] {
 			noDataExpression: true,
 			displayOptions: {
 				show: {
+					'@version': [{ _cnd: { lt: 3 } }],
 					resource: ['search'],
 				},
 			},
@@ -168,117 +282,12 @@ function buildProperties(): INodeProperties[] {
 			default: 'search',
 		},
 		{
-			displayName: 'Mode Info',
-			name: 'modeNotice',
-			type: 'notice',
-			default: '',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-				},
-			},
-			description:
-				'CUA uses vision/coordinates (best for complex UIs). DOM uses selectors (faster, any LLM). Hybrid combines both.',
-		},
-		{
-			displayName: 'Starting URL',
-			name: 'url',
-			type: 'string',
-			default: '',
-			required: true,
-			placeholder: 'e.g. https://example.com',
-			description: 'The starting page URL for the agent',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-				},
-			},
-		},
-		{
-			displayName: 'Instruction',
-			name: 'instruction',
-			type: 'string',
-			typeOptions: {
-				rows: 4,
-			},
-			default: '',
-			required: true,
-			placeholder: 'e.g. Find the pricing page and extract all plan names and prices',
-			description: 'The task for the agent to complete',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-				},
-			},
-		},
-		{
-			displayName: 'Model Source',
-			name: 'modelSource',
-			type: 'options',
-			noDataExpression: true,
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-				},
-			},
-			options: [
-				{
-					name: 'Model Gateway (Browserbase)',
-					value: 'gateway',
-					description: 'Use Browserbase-managed model routing. Mix any providers freely.',
-				},
-				{
-					name: 'User-Provided API Key',
-					value: 'userProvidedKey',
-					description:
-						'Use your own model API key from credentials. Same provider required for both models.',
-				},
-			],
-			default: 'gateway',
-			description:
-				'Choose how model calls are routed. Model Gateway lets you mix providers; User-provided API key requires both models from the same provider.',
-		},
-		{
-			displayName: 'Model Info',
-			name: 'modelNoticeGateway',
-			type: 'notice',
-			default: '',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-					modelSource: ['gateway'],
-				},
-			},
-			description:
-				'Using the Browserbase Model Gateway. You can freely mix models from different providers for Driver and Agent.',
-		},
-		{
-			displayName: 'Model Info',
-			name: 'modelNoticeBYOK',
-			type: 'notice',
-			default: '',
-			displayOptions: {
-				show: {
-					resource: ['agent'],
-					operation: ['execute'],
-					modelSource: ['userProvidedKey'],
-				},
-			},
-			description:
-				'Using your own API key from credentials. Both Driver and Agent models MUST be from the same provider.',
-		},
-		{
-			displayName: 'Driver Model',
+			displayName: 'Model',
 			name: 'driverModel',
 			type: 'options',
 			displayOptions: {
 				show: {
-					resource: ['agent'],
+					'@version': [{ _cnd: { gte: 3 } }],
 					operation: ['execute'],
 				},
 			},
@@ -297,11 +306,267 @@ function buildProperties(): INodeProperties[] {
 				},
 				{
 					name: 'Gemini 3 Flash (Google)',
-					value: 'google/gemini-3-flash',
+					value: 'google/gemini-3-flash-preview',
 				},
 				{
 					name: 'Gemini 3 Pro (Google)',
-					value: 'google/gemini-3-pro',
+					value: 'google/gemini-3-pro-preview',
+				},
+				{
+					name: 'GPT-4o (OpenAI)',
+					value: 'openai/gpt-4o',
+				},
+				{
+					name: 'GPT-4o Mini (OpenAI)',
+					value: 'openai/gpt-4o-mini',
+				},
+			],
+			default: 'google/gemini-3-flash-preview',
+			description:
+				'The model that drives the browser and runs the agent. Handles both navigation and reasoning by default. To use a different reasoning model, set "Agent Model" in Model Options. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare models.',
+		},
+		{
+			displayName: 'Starting URL',
+			name: 'url',
+			type: 'string',
+			default: '',
+			required: true,
+			placeholder: 'e.g. https://example.com',
+			description: 'The starting page URL for the agent',
+			displayOptions: {
+				show: {
+					operation: ['execute'],
+				},
+			},
+		},
+		{
+			displayName: 'Instruction',
+			name: 'instruction',
+			type: 'string',
+			typeOptions: {
+				rows: 4,
+			},
+			default: '',
+			required: true,
+			placeholder: 'e.g. Find the pricing page and extract all plan names and prices',
+			description: 'The task for the agent to complete',
+			displayOptions: {
+				show: {
+					operation: ['execute'],
+				},
+			},
+		},
+		{
+			displayName: 'Model Options',
+			name: 'modelOptions',
+			type: 'collection',
+			placeholder: 'Add Option',
+			default: {},
+			displayOptions: {
+				show: {
+					'@version': [{ _cnd: { gte: 3 } }],
+					operation: ['execute'],
+				},
+			},
+			options: [
+				{
+					displayName: 'Agent Model',
+					name: 'modelCua',
+					type: 'options',
+					displayOptions: {
+						show: {
+							mode: ['cua'],
+						},
+					},
+					options: CUA_MODEL_OPTIONS,
+					default: 'google/gemini-3-flash-preview',
+					description:
+						'Optional. Overrides the reasoning model for CUA mode. Defaults to the Model above. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare models.',
+				},
+				{
+					displayName: 'Agent Model',
+					name: 'modelDom',
+					type: 'options',
+					displayOptions: {
+						show: {
+							mode: ['dom'],
+						},
+					},
+					options: [
+						{
+							name: 'Claude Sonnet 4.6 (Anthropic)',
+							value: 'anthropic/claude-sonnet-4-6',
+						},
+						{
+							name: 'Gemini 3 Flash (Google)',
+							value: 'google/gemini-3-flash-preview',
+						},
+						{
+							name: 'Gemini 3 Pro (Google)',
+							value: 'google/gemini-3-pro-preview',
+						},
+						{
+							name: 'GPT-4.1 (OpenAI)',
+							value: 'openai/gpt-4.1',
+						},
+						{
+							name: 'GPT-4o (OpenAI)',
+							value: 'openai/gpt-4o',
+						},
+						{
+							name: 'GPT-4o Mini (OpenAI) - Budget',
+							value: 'openai/gpt-4o-mini',
+						},
+					],
+					default: 'google/gemini-3-flash-preview',
+					description:
+						'Optional. Overrides the reasoning model for DOM mode. Defaults to the Model above. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare models.',
+				},
+				{
+					displayName: 'Agent Model',
+					name: 'modelHybrid',
+					type: 'options',
+					displayOptions: {
+						show: {
+							mode: ['hybrid'],
+						},
+					},
+					options: HYBRID_MODEL_OPTIONS,
+					default: 'google/gemini-3-flash-preview',
+					description:
+						'Optional. Overrides the reasoning model for Hybrid mode (must support coordinate actions). Defaults to the Model above. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare models.',
+				},
+				{
+					displayName: 'Highlight Cursor',
+					name: 'highlightCursor',
+					type: 'boolean',
+					default: true,
+					description: 'Whether to highlight the cursor during execution (CUA/Hybrid only)',
+				},
+				{
+					displayName: 'Max Steps',
+					name: 'maxSteps',
+					type: 'number',
+					default: 20,
+					description: 'Maximum number of steps the agent can take',
+				},
+				{
+					displayName: 'Mode',
+					name: 'mode',
+					type: 'options',
+					options: [
+						{
+							name: 'CUA (Computer Use Agent)',
+							value: 'cua',
+							description: 'Uses vision and coordinates. Works with CUA-specific models.',
+						},
+						{
+							name: 'DOM',
+							value: 'dom',
+							description: 'Uses DOM selectors. Works with any LLM. Faster.',
+						},
+						{
+							name: 'Hybrid (Experimental)',
+							value: 'hybrid',
+							description: 'Combines vision and DOM. Requires specific models.',
+						},
+					],
+					default: 'cua',
+					description:
+						'How the agent interacts with pages. CUA uses vision/coordinates (best for complex UIs). DOM uses selectors (faster, works with any LLM). Hybrid combines both. <a href="https://docs.stagehand.dev/v3/basics/agent" target="_blank">How to pick a mode</a>.',
+				},
+				{
+					displayName: 'Model Source',
+					name: 'modelSource',
+					type: 'options',
+					options: [
+						{
+							name: 'Model Gateway (Browserbase)',
+							value: 'gateway',
+							description: 'Use Browserbase-managed model routing. Mix any providers freely.',
+						},
+						{
+							name: 'User-Provided API Key',
+							value: 'userProvidedKey',
+							description:
+								'Use your own model API key from credentials. Same provider required for both models.',
+						},
+					],
+					default: 'gateway',
+					description:
+						'How model calls are routed. Model Gateway lets you freely mix providers. User-provided API key uses your own key from credentials and requires the Model and Agent Model to be from the same provider.',
+				},
+				{
+					displayName: 'System Prompt',
+					name: 'systemPrompt',
+					type: 'string',
+					typeOptions: {
+						rows: 4,
+					},
+					default: '',
+					placeholder: 'e.g. You are a helpful assistant that extracts data from websites',
+					description: 'Custom system prompt for the agent',
+				},
+			],
+		},
+		{
+			displayName: 'Model Source',
+			name: 'modelSource',
+			type: 'options',
+			noDataExpression: true,
+			displayOptions: {
+				show: {
+					'@version': [{ _cnd: { lt: 3 } }],
+					operation: ['execute'],
+				},
+			},
+			options: [
+				{
+					name: 'Model Gateway (Browserbase)',
+					value: 'gateway',
+					description: 'Use Browserbase-managed model routing. Mix any providers freely.',
+				},
+				{
+					name: 'User-Provided API Key',
+					value: 'userProvidedKey',
+					description:
+						'Use your own model API key from credentials. Same provider required for both models.',
+				},
+			],
+			default: 'gateway',
+			description:
+				'How model calls are routed. Model Gateway lets you freely mix providers for Driver and Agent. User-provided API key uses your own key from credentials and requires both models from the same provider.',
+		},
+		{
+			displayName: 'Driver Model',
+			name: 'driverModel',
+			type: 'options',
+			displayOptions: {
+				show: {
+					'@version': [{ _cnd: { lt: 3 } }],
+					operation: ['execute'],
+				},
+			},
+			options: [
+				{
+					name: 'Claude Haiku 4.5 (Anthropic)',
+					value: 'anthropic/claude-haiku-4-5',
+				},
+				{
+					name: 'Claude Opus 4.6 (Anthropic)',
+					value: 'anthropic/claude-opus-4-6',
+				},
+				{
+					name: 'Claude Sonnet 4.6 (Anthropic)',
+					value: 'anthropic/claude-sonnet-4-6',
+				},
+				{
+					name: 'Gemini 3 Flash (Google)',
+					value: 'google/gemini-3-flash-preview',
+				},
+				{
+					name: 'Gemini 3 Pro (Google)',
+					value: 'google/gemini-3-pro-preview',
 				},
 				{
 					name: 'GPT-4o (OpenAI)',
@@ -313,7 +578,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'Model for browser session (DOM-based, used for navigation)',
+			description:
+				'Model for browser session (DOM-based, used for navigation). See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Mode',
@@ -321,7 +587,7 @@ function buildProperties(): INodeProperties[] {
 			type: 'options',
 			displayOptions: {
 				show: {
-					resource: ['agent'],
+					'@version': [{ _cnd: { lt: 3 } }],
 					operation: ['execute'],
 				},
 			},
@@ -343,7 +609,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'cua',
-			description: 'Agent mode determines how the agent interacts with pages',
+			description:
+				'How the agent interacts with pages. CUA uses vision/coordinates (best for complex UIs). DOM uses selectors (faster, works with any LLM). Hybrid combines both. <a href="https://docs.stagehand.dev/v3/basics/agent" target="_blank">How to pick a mode</a>.',
 		},
 		{
 			displayName: 'Agent Model',
@@ -351,47 +618,15 @@ function buildProperties(): INodeProperties[] {
 			type: 'options',
 			displayOptions: {
 				show: {
-					resource: ['agent'],
+					'@version': [{ _cnd: { lt: 3 } }],
 					operation: ['execute'],
 					mode: ['cua'],
 				},
 			},
-			options: [
-				{
-					name: 'Claude Haiku 4.5 (Anthropic)',
-					value: 'anthropic/claude-haiku-4-5',
-				},
-				{
-					name: 'Claude Opus 4.6 (Anthropic)',
-					value: 'anthropic/claude-opus-4-6',
-				},
-				{
-					name: 'Claude Sonnet 4.6 (Anthropic)',
-					value: 'anthropic/claude-sonnet-4-6',
-				},
-				{
-					name: 'Computer Use Preview (2025-03-11, OpenAI)',
-					value: 'openai/computer-use-preview-2025-03-11',
-				},
-				{
-					name: 'Computer Use Preview (OpenAI)',
-					value: 'openai/computer-use-preview',
-				},
-				{
-					name: 'Gemini 2.5 CUA (Google)',
-					value: 'google/gemini-2.5-computer-use-preview-10-2025',
-				},
-				{
-					name: 'Gemini 3 Flash (Google)',
-					value: 'google/gemini-3-flash-preview',
-				},
-				{
-					name: 'Gemini 3 Pro (Google)',
-					value: 'google/gemini-3-pro-preview',
-				},
-			],
+			options: CUA_MODEL_OPTIONS,
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'CUA model for vision-based browser control',
+			description:
+				'CUA model for vision-based browser control. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Agent Model',
@@ -399,7 +634,7 @@ function buildProperties(): INodeProperties[] {
 			type: 'options',
 			displayOptions: {
 				show: {
-					resource: ['agent'],
+					'@version': [{ _cnd: { lt: 3 } }],
 					operation: ['execute'],
 					mode: ['dom'],
 				},
@@ -431,7 +666,8 @@ function buildProperties(): INodeProperties[] {
 				},
 			],
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'LLM for DOM-based browser control',
+			description:
+				'LLM for DOM-based browser control. See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Agent Model',
@@ -439,27 +675,15 @@ function buildProperties(): INodeProperties[] {
 			type: 'options',
 			displayOptions: {
 				show: {
-					resource: ['agent'],
+					'@version': [{ _cnd: { lt: 3 } }],
 					operation: ['execute'],
 					mode: ['hybrid'],
 				},
 			},
-			options: [
-				{
-					name: 'Gemini 3 Flash (Google)',
-					value: 'google/gemini-3-flash-preview',
-				},
-				{
-					name: 'Claude Sonnet 4.6 (Anthropic)',
-					value: 'anthropic/claude-sonnet-4-6',
-				},
-				{
-					name: 'Claude Haiku 4.5 (Anthropic)',
-					value: 'anthropic/claude-haiku-4-5-20251001',
-				},
-			],
+			options: HYBRID_MODEL_OPTIONS,
 			default: 'anthropic/claude-sonnet-4-6',
-			description: 'Model for hybrid mode (must support coordinate actions)',
+			description:
+				'Model for hybrid mode (must support coordinate actions). See <a href="https://www.stagehand.dev/evals" target="_blank">Stagehand model evals</a> to compare model performance.',
 		},
 		{
 			displayName: 'Options',
@@ -469,7 +693,7 @@ function buildProperties(): INodeProperties[] {
 			default: {},
 			displayOptions: {
 				show: {
-					resource: ['agent'],
+					'@version': [{ _cnd: { lt: 3 } }],
 					operation: ['execute'],
 				},
 			},
@@ -512,9 +736,7 @@ function buildProperties(): INodeProperties[] {
 				'Pass sensitive data to the agent. The LLM sees %variableName% placeholders and descriptions, but never the actual values.',
 			displayOptions: {
 				show: {
-					resource: ['agent'],
 					operation: ['execute'],
-					mode: ['dom', 'hybrid'],
 				},
 			},
 			options: [
@@ -560,7 +782,6 @@ function buildProperties(): INodeProperties[] {
 			default: {},
 			displayOptions: {
 				show: {
-					resource: ['agent'],
 					operation: ['execute'],
 				},
 			},
@@ -625,7 +846,6 @@ function buildProperties(): INodeProperties[] {
 			default: {},
 			displayOptions: {
 				show: {
-					resource: ['agent'],
 					operation: ['execute'],
 				},
 			},
@@ -712,7 +932,6 @@ function buildProperties(): INodeProperties[] {
 			description: 'The search query to run',
 			displayOptions: {
 				show: {
-					resource: ['search'],
 					operation: ['search'],
 				},
 			},
@@ -729,7 +948,6 @@ function buildProperties(): INodeProperties[] {
 			description: 'How many search results to return (1-25)',
 			displayOptions: {
 				show: {
-					resource: ['search'],
 					operation: ['search'],
 				},
 			},
@@ -744,7 +962,6 @@ function buildProperties(): INodeProperties[] {
 			description: 'The URL to fetch',
 			displayOptions: {
 				show: {
-					resource: ['fetch'],
 					operation: ['fetch'],
 				},
 			},
@@ -757,7 +974,6 @@ function buildProperties(): INodeProperties[] {
 			default: {},
 			displayOptions: {
 				show: {
-					resource: ['fetch'],
 					operation: ['fetch'],
 				},
 			},
@@ -794,9 +1010,9 @@ export class Browserbase implements INodeType {
 		name: 'browserbase',
 		icon: 'file:../../icons/browserbase.svg',
 		group: ['transform'],
-		version: [2, 2.1],
+		version: [2, 2.1, 3],
 		subtitle:
-			'={{$parameter["resource"] === "agent" ? $parameter["operation"] + ": " + $parameter["mode"] : $parameter["operation"]}}',
+			'={{$parameter["operation"] === "execute" ? "Run an agent" : ($parameter["operation"] === "fetch" ? "Fetch a webpage" : "Search the web")}}',
 		description: 'Browser automation, web search, and page fetches with Browserbase.',
 		defaults: {
 			name: 'Browserbase',
@@ -959,17 +1175,78 @@ export class Browserbase implements INodeType {
 		url = normalizeUrl(url);
 
 		const instruction = executeFunctions.getNodeParameter('instruction', itemIndex) as string;
-		const modelSource = executeFunctions.getNodeParameter('modelSource', itemIndex) as string;
 		const driverModel = executeFunctions.getNodeParameter('driverModel', itemIndex) as string;
-		const mode = executeFunctions.getNodeParameter('mode', itemIndex) as string;
 
+		let mode: string;
+		let modelSource: string;
 		let agentModel: string;
-		if (mode === 'cua') {
-			agentModel = executeFunctions.getNodeParameter('modelCua', itemIndex) as string;
-		} else if (mode === 'dom') {
-			agentModel = executeFunctions.getNodeParameter('modelDom', itemIndex) as string;
+		let maxSteps: number;
+		let systemPrompt: string | undefined;
+		let highlightCursor: boolean;
+
+		if (executeFunctions.getNode().typeVersion >= 3) {
+			// v3+: model settings live in the "Model Options" collection.
+			const modelOptions = executeFunctions.getNodeParameter('modelOptions', itemIndex, {}) as {
+				mode?: string;
+				modelSource?: string;
+				modelCua?: string;
+				modelDom?: string;
+				modelHybrid?: string;
+				maxSteps?: number;
+				systemPrompt?: string;
+				highlightCursor?: boolean;
+			};
+			mode = modelOptions.mode ?? 'cua';
+			modelSource = modelOptions.modelSource ?? 'gateway';
+			// Agent Model is an optional override; when unset it falls back to the top-level Model.
+			if (mode === 'cua') {
+				agentModel = modelOptions.modelCua || driverModel;
+			} else if (mode === 'dom') {
+				agentModel = modelOptions.modelDom || driverModel;
+			} else {
+				agentModel = modelOptions.modelHybrid || driverModel;
+			}
+			maxSteps = modelOptions.maxSteps ?? 20;
+			systemPrompt = modelOptions.systemPrompt;
+			highlightCursor = modelOptions.highlightCursor ?? true;
 		} else {
-			agentModel = executeFunctions.getNodeParameter('modelHybrid', itemIndex) as string;
+			// v2/2.1: legacy top-level model fields and "Options" collection.
+			modelSource = executeFunctions.getNodeParameter('modelSource', itemIndex, 'gateway') as string;
+			mode = executeFunctions.getNodeParameter('mode', itemIndex, 'cua') as string;
+			if (mode === 'cua') {
+				agentModel = executeFunctions.getNodeParameter('modelCua', itemIndex) as string;
+			} else if (mode === 'dom') {
+				agentModel = executeFunctions.getNodeParameter('modelDom', itemIndex) as string;
+			} else {
+				agentModel = executeFunctions.getNodeParameter('modelHybrid', itemIndex) as string;
+			}
+			const options = executeFunctions.getNodeParameter('options', itemIndex, {}) as {
+				maxSteps?: number;
+				systemPrompt?: string;
+				highlightCursor?: boolean;
+			};
+			maxSteps = options.maxSteps ?? 20;
+			systemPrompt = options.systemPrompt;
+			highlightCursor = options.highlightCursor ?? true;
+		}
+
+		// CUA mode only works with computer-use-capable models. When the Agent
+		// Model override is unset it falls back to the driver Model, which may not
+		// be a CUA model — sending it would make Stagehand silently skip CUA mode.
+		if (mode === 'cua' && !CUA_MODELS.has(agentModel)) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`CUA mode requires a computer-use-capable Agent Model, but "${agentModel}" is not one. Set "Agent Model" in Model Options to a CUA model (e.g. google/gemini-3-flash-preview), or switch Mode to DOM.`,
+			);
+		}
+
+		// Same fallback risk as CUA: an unset hybrid Agent Model resolves to the
+		// driver Model, which may not support coordinate actions.
+		if (mode === 'hybrid' && !isHybridCapable(agentModel)) {
+			throw new NodeOperationError(
+				executeFunctions.getNode(),
+				`Hybrid mode requires a model that supports coordinate actions, but "${agentModel}" is not one. Set "Agent Model" in Model Options to a hybrid-capable model (e.g. google/gemini-3-flash-preview), or switch Mode to DOM.`,
+			);
 		}
 
 		if (modelSource === 'userProvidedKey') {
@@ -978,16 +1255,11 @@ export class Browserbase implements INodeType {
 			if (driverProvider !== agentProvider) {
 				throw new NodeOperationError(
 					executeFunctions.getNode(),
-					`When using your own model API key, both Driver and Agent models must be from the same provider. Driver is "${driverProvider}", Agent is "${agentProvider}".`,
+					`When using your own model API key, the Model and Agent Model must be from the same provider. Model is "${driverProvider}", Agent Model is "${agentProvider}".`,
 				);
 			}
 		}
 
-		const options = executeFunctions.getNodeParameter('options', itemIndex, {}) as {
-			maxSteps?: number;
-			systemPrompt?: string;
-			highlightCursor?: boolean;
-		};
 		const browserOptions = executeFunctions.getNodeParameter(
 			'browserOptions',
 			itemIndex,
@@ -1091,17 +1363,17 @@ export class Browserbase implements INodeType {
 				model: agentModel,
 			};
 
-			if (options.systemPrompt) {
-				agentConfigBody.systemPrompt = options.systemPrompt;
+			if (systemPrompt) {
+				agentConfigBody.systemPrompt = systemPrompt;
 			}
 
 			const executeOptions: Record<string, unknown> = {
 				instruction,
-				maxSteps: options.maxSteps ?? 20,
+				maxSteps,
 			};
 
-			if ((mode === 'cua' || mode === 'hybrid') && options.highlightCursor !== false) {
-				executeOptions.highlightCursor = options.highlightCursor ?? true;
+			if ((mode === 'cua' || mode === 'hybrid') && highlightCursor !== false) {
+				executeOptions.highlightCursor = highlightCursor;
 			}
 
 			if (mode === 'dom' || mode === 'hybrid') {
@@ -1192,20 +1464,33 @@ export class Browserbase implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				const resource = this.getNodeParameter('resource', i) as string;
-				const modelSource = this.getNodeParameter('modelSource', i, 'gateway') as string;
+				const operation = this.getNodeParameter('operation', i) as string;
+				let modelSource = 'gateway';
+				if (operation === 'execute') {
+					if (this.getNode().typeVersion >= 3) {
+						const itemModelOptions = this.getNodeParameter('modelOptions', i, {}) as {
+							modelSource?: string;
+						};
+						modelSource = itemModelOptions.modelSource ?? 'gateway';
+					} else {
+						modelSource = this.getNodeParameter('modelSource', i, 'gateway') as string;
+					}
+				}
 				const credentials = await this.getCredentials('browserbaseApi');
 
-				if (resource === 'agent' && modelSource === 'userProvidedKey' && !credentials.modelApiKey) {
-					throw new NodeOperationError(
-						this.getNode(),
-						'Model Source is set to "User-provided API key" but no Model API Key is configured in the Browserbase credentials.',
-					);
+				let modelApiKey: string | undefined;
+				if (operation === 'execute' && modelSource === 'userProvidedKey') {
+					const provider = (this.getNodeParameter('driverModel', i) as string).split('/')[0];
+					modelApiKey = resolveModelApiKey(credentials, provider);
+					if (!modelApiKey) {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Model Source is set to "User-provided API key" but no API key for "${provider}" is configured in the Browserbase credentials.`,
+						);
+					}
 				}
 
-				const headers = getHeaders(credentials, {
-					includeModelApiKey: resource === 'agent' && modelSource === 'userProvidedKey',
-				});
+				const headers = getHeaders(credentials, { modelApiKey });
 
 				const useCredentialBaseUrls = this.getNode().typeVersion >= 2.1;
 				const apiBaseUrl = useCredentialBaseUrls
@@ -1215,9 +1500,9 @@ export class Browserbase implements INodeType {
 					? normalizeBaseUrl((credentials.stagehandBaseUrl as string) || STAGEHAND_BASE_URL)
 					: STAGEHAND_BASE_URL;
 
-				if (resource === 'search') {
+				if (operation === 'search') {
 					returnData.push(await node.executeSearch(this, i, headers, apiBaseUrl));
-				} else if (resource === 'fetch') {
+				} else if (operation === 'fetch') {
 					returnData.push(await node.executeFetch(this, i, headers, apiBaseUrl));
 				} else {
 					returnData.push(await node.executeAgent(this, i, headers, stagehandBaseUrl));
